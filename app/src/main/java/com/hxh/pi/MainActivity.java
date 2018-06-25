@@ -1,16 +1,25 @@
 package com.hxh.pi;
 
+import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.ActivityManager;
 import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.StatFs;
+import android.provider.Settings;
 import android.support.v7.app.AppCompatActivity;
 import android.telephony.TelephonyManager;
 import android.text.format.Formatter;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import com.tbruyelle.rxpermissions2.Permission;
+import com.tbruyelle.rxpermissions2.RxPermissions;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -19,6 +28,7 @@ import java.io.IOException;
 
 public class MainActivity extends AppCompatActivity
 {
+    private Context mContext = this;
     private TextView tv;
 
     @Override
@@ -27,9 +37,47 @@ public class MainActivity extends AppCompatActivity
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        tv = (TextView) findViewById(R.id.tv);
+        tv = findViewById(R.id.tv);
 
-        initData();
+        getPermission();
+    }
+
+    @SuppressLint("CheckResult")
+    private void getPermission()
+    {
+        new RxPermissions(this)
+                .requestEach(Manifest.permission.READ_PHONE_STATE)
+                .subscribe(new io.reactivex.functions.Consumer<Permission>()
+                {
+                    @Override
+                    public void accept(Permission permission)
+                    {
+                        if (permission.granted)
+                        {
+                            //用户已经同意该权限
+                            initData();
+                        }
+                        else if (permission.shouldShowRequestPermissionRationale)
+                        {
+                            //用户拒绝了该权限，没有选中『不再询问』,再次启动时，还会提示请求权限的对话框
+                            Toast.makeText(mContext, "无该权限无法查看信息", Toast.LENGTH_SHORT).show();
+
+                            finish();
+                        }
+                        else
+                        {
+                            //用户拒绝了该权限，并且选中『不再询问』
+                            //启动系统权限设置界面
+                            Toast.makeText(mContext, "在该页面中点击“权限”进入，开启“电话”权限", Toast.LENGTH_SHORT).show();
+
+                            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                            intent.setData(Uri.parse("package:" + getPackageName()));
+                            startActivity(intent);
+
+                            finish();
+                        }
+                    }
+                });
     }
 
     private void initData()
@@ -72,20 +120,20 @@ public class MainActivity extends AppCompatActivity
     private String getInfo()
     {
         TelephonyManager mTm = (TelephonyManager) this.getSystemService(TELEPHONY_SERVICE);
-        String imei = mTm.getDeviceId();
-        String imsi = mTm.getSubscriberId();
+        @SuppressLint({"MissingPermission", "HardwareIds"}) String imei = mTm.getDeviceId();
+        @SuppressLint({"MissingPermission", "HardwareIds"}) String imsi = mTm.getSubscriberId();
 
         String mtyb = android.os.Build.BRAND;//手机品牌
         String mtype = android.os.Build.MODEL; // 手机型号
         String syscode = android.os.Build.VERSION.RELEASE; // 系统版本号
-        String numer = mTm.getLine1Number(); // 手机号码，有的可得，有的不可得
+        @SuppressLint({"MissingPermission", "HardwareIds"}) String number = mTm.getLine1Number(); // 手机号码，有的可得，有的不可得
 
         return "手机IMEI号：" + imei +
                 "\n手机IESI号：" + imsi +
                 "\n手机品牌：" + mtyb +
                 "\n手机型号：" + mtype +
                 "\n系统版本号：" + syscode +
-                "\n手机号码" + numer;
+                "\n手机号码" + number;
     }
 
     //获得手机屏幕宽高
@@ -206,17 +254,18 @@ public class MainActivity extends AppCompatActivity
                 bool = "Root:true";
             }
         }
-        catch (Exception e) {}
+        catch (Exception ignored) {}
 
         return bool;
     }
 
     //获取手机MAC地址
     // 只有手机开启wifi才能获取到mac地址
+    @SuppressLint("HardwareIds")
     private String getMacAddress()
     {
         String result = "";
-        WifiManager wifiManager = (WifiManager) getSystemService(Context.WIFI_SERVICE);
+        WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
         WifiInfo wifiInfo = wifiManager.getConnectionInfo();
         result = wifiInfo.getMacAddress();
 
